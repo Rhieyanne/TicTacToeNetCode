@@ -1,0 +1,6 @@
+Game State is good
+
+we need to add a multiplayer room that goes into the new state
+so login -> lobby -> waiting -> playing room | then you can go back to the lobby in the waiting room or playing room
+1:Input box and login button for user
+2: create or join room by name which is [Waiting Room] or [Playing Room]
