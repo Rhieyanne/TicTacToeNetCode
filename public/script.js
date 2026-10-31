@@ -9,9 +9,9 @@ let currentState = "";
 
 // which screen belongs to which state
 const screens = {
-    menu: document.getElementById("menu-screen"),
-    playing: document.getElementById("game-screen"),
-    gameOver: document.getElementById("gameover-screen")
+    [STATES.MENU]: document.getElementById("menu-screen"),
+    [STATES.PLAYING]: document.getElementById("game-screen"),
+    [STATES.GAME_OVER]: document.getElementById("gameover-screen")
 };
 
 // the ONLY place the state is allowed to change
@@ -31,12 +31,13 @@ function changeState(newState) {
 
     // ...then show only the one for the new state
     screens[newState].classList.remove("hidden");
-    document.getElementById("state-label").textContent = "Current state: " + newState;
+    const stateLabel = document.getElementById("state-label");
+    stateLabel.textContent = "Current state: " + newState;
 }
 
 // buttons just ask for a state change
 document.getElementById("play-button").addEventListener("click", function () {
-    changeState(STATES.PLAYING);
+   changeState(STATES.PLAYING);
 });
 
 document.getElementById("end-button").addEventListener("click", function () {
