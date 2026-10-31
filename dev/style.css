@@ -1,0 +1,32 @@
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background: white;
+  color: black;
+}
+
+#board {
+  display: grid;
+  grid-template-columns: repeat(3, 80px);
+  gap: 4px;
+  justify-content: center;
+}
+
+.cell {
+  width: 80px;
+  height: 80px;
+  font-size: 2rem;
+  background: white;
+  color: black;
+  border: 2px solid black;
+  cursor: pointer;
+}
+
+#restart {
+  margin-top: 20px;
+  padding: 8px 16px;
+  background: white;
+  color: black;
+  border: 2px solid black;
+  cursor: pointer;
+}

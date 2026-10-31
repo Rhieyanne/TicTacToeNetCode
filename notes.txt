@@ -4,3 +4,10 @@ we need to add a multiplayer room that goes into the new state
 so login -> lobby -> waiting -> playing room | then you can go back to the lobby in the waiting room or playing room
 1:Input box and login button for user
 2: create or join room by name which is [Waiting Room] or [Playing Room]
+3: waiting room, locked "waiting room screen"
+4: back while waiting
+5: seconmdplaeyr joins then a button that messages the oppenent, this tell us both players started the match and forwards the button press to the other player only
+6: back while playing removes the player and tells the opponent they left
+
+ADDED A DEV FOLDER FOR TESTING AND DEBUGGING PURPOSES [ THIS IS THE LOCAL DEV FOLDER WHICH IS THE LOCAL VERSION OF THE GAME AND NOT THE FINAL VERSION OF THE GAME ]!!
+NEW FEATURES WILL BE ADDED HERE OR SOMETHING!!!
