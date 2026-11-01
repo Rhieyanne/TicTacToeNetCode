@@ -9,7 +9,8 @@ const STATES = {
     LOGIN: "login",
     LOBBY: "lobby",
     WAITING: "waiting",
-    PLAYING: "playing"
+    PLAYING: "playing",
+    SPECTATING: "spectating"
 };
 
 let currentState = "";
@@ -18,7 +19,8 @@ const screens = {
     [STATES.LOGIN]: document.getElementById("login-screen"),
     [STATES.LOBBY]: document.getElementById("lobby-screen"),
     [STATES.WAITING]: document.getElementById("waiting-screen"),
-    [STATES.PLAYING]: document.getElementById("playing-screen")
+    [STATES.PLAYING]: document.getElementById("playing-screen"),
+    [STATES.SPECTATING]: document.getElementById("playing-screen") // same board, but no control
 };
 
 const stateLabel = document.getElementById("state-label");
@@ -119,8 +121,10 @@ const cells = document.querySelectorAll(".cell");
 const rematchButton = document.getElementById("rematch-button");
 
 let myMark = "";
+let isSpectator = false;
 
 socket.on("matchStarted", function (data) {
+    isSpectator = false;
     myMark = data.myMark;
     matchText.textContent = "You are " + myMark + " vs " + data.opponent;
     waitingText.textContent = "Room: " + data.roomName;
@@ -134,6 +138,11 @@ socket.on("gameUpdate", function (game) {
     for (let i = 0; i < cells.length; i++) {
         cells[i].textContent = game.board[i];
         cells[i].disabled = !myTurn || game.board[i] !== "";
+    }
+
+    if (isSpectator) {
+        showSpectatorStatus(game);
+        return;
     }
 
     if (game.winner === "draw") {
@@ -167,6 +176,40 @@ rematchButton.addEventListener("click", function () {
     socket.emit("rematch");
 });
 
+// spectating
+
+// the room was full, so we joined to watch
+socket.on("spectating", function (data) {
+    isSpectator = true;
+    myMark = ""; // spectators have no mark, so they can never click a square
+    rematchButton.classList.add("hidden");
+
+    if (data.players.length === 2) {
+        matchText.textContent = "Watching " + data.players[0] + " vs " + data.players[1];
+    } else {
+        matchText.textContent = "Watching " + data.players[0] + ", waiting for another player...";
+    }
+
+    changeState(STATES.SPECTATING);
+});
+
+// both players left, so the room is gone
+socket.on("roomClosed", function () {
+    socket.emit("leaveRoom");
+    backToLobby();
+    lobbyMessage.textContent = "The room you were watching closed";
+});
+
+function showSpectatorStatus(game) {
+    if (game.winner === "draw") {
+        gameStatus.textContent = "It's a draw!";
+    } else if (game.winner !== "") {
+        gameStatus.textContent = game.winner + " wins!";
+    } else {
+        gameStatus.textContent = game.turn + "'s turn";
+    }
+}
+
 // the other player left, so go back to waiting in the same room
 socket.on("opponentLeft", function () {
     console.log("Your opponent left the match");
@@ -181,6 +224,7 @@ document.getElementById("playing-back-button").addEventListener("click", functio
 // helpers
 
 function backToLobby() {
+    isSpectator = false;
     roomInput.value = "";
     lobbyMessage.textContent = "";
     changeState(STATES.LOBBY);

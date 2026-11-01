@@ -21,8 +21,9 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 // username -> password (only saved while the server is running)
 let accounts = {};
 
-// room name -> { players, board, turn, winner }
+// room name -> { players, spectators, board, turn, winner }
 // each player is { id, name, mark }
+// spectators is a list of socket ids (they can only watch)
 let rooms = {};
 
 // all the ways to win
@@ -69,10 +70,27 @@ function sendGame(roomName) {
     });
 }
 
+// tell everyone watching a room who is playing in it
+function sendSpectatorInfo(roomName) {
+    const room = rooms[roomName];
+
+    const playerNames = room.players.map(function (roomPlayer) {
+        return roomPlayer.name + " (" + roomPlayer.mark + ")";
+    });
+
+    room.spectators.forEach(function (spectatorId) {
+        io.to(spectatorId).emit("spectating", {
+            roomName: roomName,
+            players: playerNames
+        });
+    });
+}
+
 io.on("connection", function (socket) {
     console.log("A player connected");
 
     let username = "";    // empty until they log in
+    let isSpectator = false; // true when watching instead of playing
     let currentRoom = ""; // empty when they are not in a room
 
     // create account feature no need for email and such lol 
@@ -110,7 +128,8 @@ io.on("connection", function (socket) {
         if (room === undefined) {
             // room doesn't exist yet, so make it and wait (creator plays X)
             rooms[roomName] = {
-                players: [{ id: socket.id, name: username, mark: "X" }]
+                players: [{ id: socket.id, name: username, mark: "X" }],
+                spectators: []
             };
             resetGame(rooms[roomName]);
 
@@ -142,9 +161,19 @@ io.on("connection", function (socket) {
                 opponent: firstPlayer.name
             });
 
+            sendSpectatorInfo(roomName); // let anyone watching know who is playing
             sendGame(roomName);
         } else {
-            socket.emit("lobbyMessage", "That room is full");
+            // room already has two players, so join as a spectator
+            room.spectators.push(socket.id);
+            isSpectator = true;
+
+            socket.join(roomName);
+            currentRoom = roomName;
+            console.log(username + " is watching room " + roomName);
+
+            sendSpectatorInfo(roomName);
+            sendGame(roomName);
         }
     });
 
@@ -164,6 +193,7 @@ io.on("connection", function (socket) {
             return roomPlayer.id === socket.id;
         });
 
+        if (player === undefined) return;                         // spectators can't play
         if (player.mark !== room.turn) return;                    // not your turn
         if (!Number.isInteger(index) || index < 0 || index > 8) return; // bad square
         if (room.board[index] !== "") return;                     // square taken
@@ -182,6 +212,7 @@ io.on("connection", function (socket) {
         const room = rooms[currentRoom];
         if (room === undefined) return;
         if (room.winner === "") return; // only after a game ends
+        if (isSpectator) return;        // spectators can't start a rematch
 
         resetGame(room);
         sendGame(currentRoom);
@@ -196,6 +227,22 @@ io.on("connection", function (socket) {
         if (currentRoom === "") return;
 
         const room = rooms[currentRoom];
+
+        // the room was already closed, or this person was only watching
+        if (room === undefined || isSpectator) {
+            if (room !== undefined) {
+                room.spectators = room.spectators.filter(function (spectatorId) {
+                    return spectatorId !== socket.id;
+                });
+            }
+
+            socket.leave(currentRoom);
+            console.log(username + " stopped watching room " + currentRoom);
+            isSpectator = false;
+            currentRoom = "";
+            return;
+        }
+
         room.players = room.players.filter(function (roomPlayer) {
             return roomPlayer.id !== socket.id;
         });
@@ -204,10 +251,13 @@ io.on("connection", function (socket) {
         console.log(username + " left room " + currentRoom);
 
         if (room.players.length === 0) {
+            io.to(currentRoom).emit("roomClosed"); // send the spectators back to the lobby
             delete rooms[currentRoom]; // nobody left, remove the room
         } else {
             resetGame(room);
-            io.to(currentRoom).emit("opponentLeft"); // tell the other player
+            io.to(room.players[0].id).emit("opponentLeft"); // tell the other player
+            sendSpectatorInfo(currentRoom);                   // tell the spectators
+            sendGame(currentRoom);
         }
 
         currentRoom = "";
