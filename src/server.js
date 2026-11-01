@@ -1,7 +1,9 @@
 // server.js
-// handles accounts and game rooms. Every player's browser connects to this.
+// handles accounts, game rooms, and the tic tac toe games inside them. Every player's browser connects to this.
 // we will use socket.io to send messages between the players and the server, and express to serve the HTML/CSS/JS files to the browser.
+// the server keeps the real board, so players can't cheat.
 
+// IMPORTANT INITIALIZATION STUFF!
 const express = require("express");
 const http = require("http");
 const path = require("path");
@@ -19,8 +21,53 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 // username -> password (only saved while the server is running)
 let accounts = {};
 
-// room name -> list of the socket ids in that room
+// room name -> { players, board, turn, winner }
+// each player is { id, name, mark }
 let rooms = {};
+
+// all the ways to win
+const winLines = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+    [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+    [0, 4, 8], [2, 4, 6]             // diagonals
+];
+
+// game helpers
+
+function resetGame(room) {
+    room.board = ["", "", "", "", "", "", "", "", ""];
+    room.turn = "X";
+    room.winner = ""; // "", "X", "O" or "draw"
+}
+
+function checkWinner(board) {
+    for (let lineIndex = 0; lineIndex < winLines.length; lineIndex++) {
+        const first = winLines[lineIndex][0];
+        const second = winLines[lineIndex][1];
+        const third = winLines[lineIndex][2];
+
+        if (board[first] !== "" && board[first] === board[second] && board[second] === board[third]) {
+            return board[first];
+        }
+    }
+
+    if (!board.includes("")) {
+        return "draw";
+    }
+
+    return "";
+}
+
+// send the current game to both players in the room
+function sendGame(roomName) {
+    const room = rooms[roomName];
+
+    io.to(roomName).emit("gameUpdate", {
+        board: room.board,
+        turn: room.turn,
+        winner: room.winner
+    });
+}
 
 io.on("connection", function (socket) {
     console.log("A player connected");
@@ -58,20 +105,44 @@ io.on("connection", function (socket) {
         if (username === "") return;    // must be logged in
         if (currentRoom !== "") return; // already in a room
 
-        if (rooms[roomName] === undefined) {
-            // room doesn't exist yet, so make it and wait
-            rooms[roomName] = [socket.id];
+        const room = rooms[roomName];
+
+        if (room === undefined) {
+            // room doesn't exist yet, so make it and wait (creator plays X)
+            rooms[roomName] = {
+                players: [{ id: socket.id, name: username, mark: "X" }]
+            };
+            resetGame(rooms[roomName]);
+
             socket.join(roomName);
             currentRoom = roomName;
             console.log(username + " created room " + roomName);
             socket.emit("waitingForOpponent", roomName);
-        } else if (rooms[roomName].length === 1) {
-            // room has one player waiting, so join and start the match
-            rooms[roomName].push(socket.id); // get the socket id of the player who just joined
+        } else if (room.players.length === 1) {
+            // one player is waiting, so join with the other mark and start
+            const firstPlayer = room.players[0];
+            const myMark = firstPlayer.mark === "X" ? "O" : "X";
+
+            room.players.push({ id: socket.id, name: username, mark: myMark }); // get the socket id of the player who just joined
+            resetGame(room);
+
             socket.join(roomName);
             currentRoom = roomName;
             console.log(username + " joined room " + roomName);
-            io.to(roomName).emit("matchStarted", roomName);
+
+            // tell each player their mark and who they are playing against
+            io.to(firstPlayer.id).emit("matchStarted", {
+                roomName: roomName,
+                myMark: firstPlayer.mark,
+                opponent: username
+            });
+            socket.emit("matchStarted", {
+                roomName: roomName,
+                myMark: myMark,
+                opponent: firstPlayer.name
+            });
+
+            sendGame(roomName);
         } else {
             socket.emit("lobbyMessage", "That room is full");
         }
@@ -81,10 +152,39 @@ io.on("connection", function (socket) {
         leaveCurrentRoom();
     });
 
-    // send a message to the other player in the room only
-    socket.on("sendToOpponent", function () {
-        if (currentRoom === "") return;
-        socket.to(currentRoom).emit("opponentMessage", username + " pressed the button!");
+    // tic tac toe
+
+    socket.on("makeMove", function (index) {
+        const room = rooms[currentRoom];
+        if (room === undefined) return;
+        if (room.players.length < 2) return; // no opponent yet
+        if (room.winner !== "") return;      // game is over
+
+        const player = room.players.find(function (roomPlayer) {
+            return roomPlayer.id === socket.id;
+        });
+
+        if (player.mark !== room.turn) return;                    // not your turn
+        if (!Number.isInteger(index) || index < 0 || index > 8) return; // bad square
+        if (room.board[index] !== "") return;                     // square taken
+
+        room.board[index] = player.mark;
+        room.winner = checkWinner(room.board);
+
+        if (room.winner === "") {
+            room.turn = room.turn === "X" ? "O" : "X";
+        }
+
+        sendGame(currentRoom);
+    });
+
+    socket.on("rematch", function () {
+        const room = rooms[currentRoom];
+        if (room === undefined) return;
+        if (room.winner === "") return; // only after a game ends
+
+        resetGame(room);
+        sendGame(currentRoom);
     });
 
     socket.on("disconnect", function () {
@@ -95,14 +195,18 @@ io.on("connection", function (socket) {
     function leaveCurrentRoom() {
         if (currentRoom === "") return;
 
-        let players = rooms[currentRoom];
-        players.splice(players.indexOf(socket.id), 1);
+        const room = rooms[currentRoom];
+        room.players = room.players.filter(function (roomPlayer) {
+            return roomPlayer.id !== socket.id;
+        });
+
         socket.leave(currentRoom);
         console.log(username + " left room " + currentRoom);
 
-        if (players.length === 0) {
+        if (room.players.length === 0) {
             delete rooms[currentRoom]; // nobody left, remove the room
         } else {
+            resetGame(room);
             io.to(currentRoom).emit("opponentLeft"); // tell the other player
         }
 

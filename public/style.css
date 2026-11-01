@@ -1,8 +1,8 @@
 body {
     font-family: Arial, sans-serif;
     text-align: center;
-    background: #1e1e2e;
-    color: white;
+    background: white;
+    color: black;
 }
 
 /* any screen with this class is not shown */
@@ -10,9 +10,38 @@ body {
     display: none;
 }
 
-button {
-    padding: 10px 20px;
+input {
+    padding: 8px;
     margin: 5px;
-    font-size: 1rem;
+    border: 2px solid black;
+}
+
+button {
+    padding: 8px 16px;
+    margin: 5px;
+    background: white;
+    color: black;
+    border: 2px solid black;
     cursor: pointer;
+}
+
+button:disabled {
+    cursor: default;
+}
+
+#board {
+    display: grid;
+    grid-template-columns: repeat(3, 80px);
+    gap: 4px;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+.cell {
+    width: 80px;
+    height: 80px;
+    margin: 0;
+    padding: 0;
+    font-size: 2rem;
+    color: black;
 }

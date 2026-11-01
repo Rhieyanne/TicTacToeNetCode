@@ -11,3 +11,5 @@
    npm start
 
 5. Open http://localhost:3000 in your browser
+
+6. You can do multiplayer if you have two localhost website running in tabs.
